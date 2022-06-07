@@ -1,0 +1,75 @@
+definitions:
+  services:
+    docker:
+      memory: 3072
+  steps:
+    - step: &test-1
+        script:
+          - echo "not implemented"
+    - step: &test-2
+        script:
+          - echo "not implemented"
+    - parallel: &tests
+        - step: *test-1
+        - step: *test-2
+
+pipelines:
+  default:
+    - parallel: *tests
+
+  custom:
+    dagster-cloud-user-code-deployment:
+      # We use this step to collect deployment env variables and share them with the following steps
+      # (https://community.atlassian.com/t5/Bitbucket-questions/Usage-of-Deployment-variables-on-multiple-steps/qaq-p/1103443)
+      - step:
+          name: set-env
+          # By using deployment param, we can set env variables for each deployment
+          # (https://support.atlassian.com/bitbucket-cloud/docs/variables-and-secrets/#Deployment-variables)
+          deployment: dagster-user-code
+          clone:
+            enabled: false
+          artifacts:
+            - .env
+            - gcp-service-account-key.json
+          script:
+            - echo ${GCP_SERVICE_ACCOUNT_KEY} > gcp-service-account-key.json
+            - echo GCP_PROJECT_ID=\"${GCP_PROJECT_ID}\" >> .env
+            - echo LOCATION_FILE=\"${LOCATION_FILE}\" >> .env
+            - echo USER_CODE_IMAGE_NAME=\"${USER_CODE_IMAGE_NAME}\" >> .env
+            - echo DAGSTER_AGENT_TOKEN=\"${DAGSTER_AGENT_TOKEN}\" >> .env
+            - echo BITBUCKET_COMMIT=\"${BITBUCKET_COMMIT}\" >> .env
+      - step:
+          image: google/cloud-sdk
+          name: build
+          services:
+            - docker
+          script:
+            - source .env
+            - gcloud auth activate-service-account --key-file gcp-service-account-key.json
+            - gcloud auth configure-docker
+            - gcloud config set project ${GCP_PROJECT_ID}
+            - >
+              docker build . \
+                --file ./Dockerfile_cloud \
+                --tag gcr.io/${GCP_PROJECT_ID}/${USER_CODE_IMAGE_NAME}:${BITBUCKET_COMMIT} \
+                --tag gcr.io/${GCP_PROJECT_ID}/${USER_CODE_IMAGE_NAME}:latest
+            - docker push gcr.io/${GCP_PROJECT_ID}/${USER_CODE_IMAGE_NAME}:${BITBUCKET_COMMIT}
+            - docker push gcr.io/${GCP_PROJECT_ID}/${USER_CODE_IMAGE_NAME}:latest
+      - step:
+          image: node:16-alpine
+          name: update-only
+          script:
+            - source .env
+            - npm ci
+            - >
+              npm run update-only -- \
+                --dagitUrl=https://hooli.dagster.cloud/prod \
+                --imageTag=${BITBUCKET_COMMIT} \
+                --locationFile=${LOCATION_FILE} \
+                --apiToken=${DAGSTER_AGENT_TOKEN}
+    dagster-cloud-agent-deployment:
+      - step:
+          name: dagster-cloud-agent-deployment
+          deployment: dagster-cloud-agent
+          script:
+            - echo "not implemented"

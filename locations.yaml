@@ -1,0 +1,4 @@
+locations:
+  bitbucket_pipelines_demo_update_only:
+    registry: gcr.io/hooli-project/demo_code
+    python_file: repo.py

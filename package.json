@@ -1,0 +1,12 @@
+{
+  "name": "dagster-cloud-cicd-pipelines",
+  "version": "0.0.1",
+  "scripts": {
+    "update-only": "node update-only/index.js"
+  },
+  "dependencies": {
+    "graphql-request": "^4.3.0",
+    "yaml": "^2.1.1",
+    "yargs-parser": "^21.0.1"
+  }
+}
